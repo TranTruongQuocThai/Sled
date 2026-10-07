@@ -2,22 +2,22 @@
 
 ## Trạng thái hiện tại
 
-Project đã sẵn sàng để Vercel nhận diện Flask từ `app.py`. Bản deploy demo tạo SQLite trong `/tmp/sled-warehouse.db` để ứng dụng có thể khởi tạo và chạy.
-
-> Dữ liệu SQLite trong `/tmp` không bền vững trên Vercel: có thể biến mất khi function khởi động lại, scale sang instance khác hoặc deploy phiên bản mới. Không sử dụng cấu hình này cho dữ liệu vận hành thật.
+Project đã sẵn sàng để Vercel nhận diện Flask từ `app.py`. Khi có biến `DATABASE_URL`, ứng dụng tự kết nối PostgreSQL bằng `psycopg`. SQLite chỉ là chế độ local/demo.
 
 ## Deploy demo
 
 1. Push source lên GitHub.
 2. Truy cập `https://vercel.com/new` và import repository `TranTruongQuocThai/Sled`.
 3. Giữ nguyên Framework Preset tự nhận diện Flask; không đặt Build Command hoặc Output Directory.
-4. Trong **Settings → Environment Variables**, thêm:
+4. Tạo PostgreSQL cloud (Vercel Postgres, Neon hoặc Supabase) và lấy connection string dạng `postgresql://...`.
+5. Trong **Settings → Environment Variables**, thêm:
 
    ```text
    SECRET_KEY=<một chuỗi ngẫu nhiên dài ít nhất 32 ký tự>
+   DATABASE_URL=postgresql://<user>:<password>@<host>/<database>?sslmode=require
    ```
 
-5. Nhấn **Deploy**.
+6. Nhấn **Deploy**. Schema và các tài khoản mẫu sẽ được tạo tự động ở lần khởi động đầu tiên.
 
 ## Deploy bằng Vercel CLI
 
@@ -29,4 +29,4 @@ vercel --prod
 
 ## Production
 
-Trước khi đưa hệ thống kho vào vận hành, cần chuyển `models/repository.py` từ SQLite sang PostgreSQL cloud (Vercel Postgres, Neon hoặc Supabase) và lưu chuỗi kết nối trong `DATABASE_URL`. Khi đó đơn hàng, tồn kho, tài khoản và sổ kế toán sẽ tồn tại ổn định giữa các lần deploy.
+Không cần đưa `warehouse.db` lên Vercel. Khi `DATABASE_URL` đã có, đơn hàng, tồn kho, tài khoản và sổ kế toán sẽ lưu ổn định trong PostgreSQL giữa các lần deploy.

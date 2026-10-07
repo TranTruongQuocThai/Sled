@@ -4,10 +4,48 @@ from flask import current_app, g
 from werkzeug.security import generate_password_hash
 
 
+class PostgresConnection:
+    """Small adapter so existing controllers work with PostgreSQL or SQLite."""
+    is_postgres = True
+
+    def __init__(self, url):
+        from psycopg import connect
+        from psycopg.rows import dict_row
+        self.connection = connect(url, row_factory=dict_row)
+
+    @staticmethod
+    def _sql(query):
+        ignore_conflicts = "INSERT OR IGNORE INTO" in query
+        query = query.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+        if ignore_conflicts and "ON CONFLICT" not in query:
+            query += " ON CONFLICT DO NOTHING"
+        return query.replace("?", "%s")
+
+    def execute(self, query, params=None):
+        cursor = self.connection.cursor()
+        cursor.execute(self._sql(query), params or ())
+        return cursor
+
+    def executemany(self, query, rows):
+        cursor = self.connection.cursor()
+        cursor.executemany(self._sql(query), rows)
+        return cursor
+
+    def commit(self):
+        self.connection.commit()
+
+    def close(self):
+        self.connection.close()
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
+        database_url = current_app.config.get("DATABASE_URL")
+        if database_url:
+            g.db = PostgresConnection(database_url)
+        else:
+            g.db = sqlite3.connect(current_app.config["DATABASE"])
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -21,6 +59,9 @@ def init_db(app):
     app.teardown_appcontext(close_db)
     with app.app_context():
         db = get_db()
+        if getattr(db, "is_postgres", False):
+            init_postgres_db(db)
+            return
         db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
@@ -99,6 +140,62 @@ def init_db(app):
         seed_component_categories(db)
         seed_commission_rules(db)
         db.commit()
+
+
+def init_postgres_db(db):
+    """Create the current PostgreSQL schema for cloud deployments."""
+    statements = """
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','sales','technician','accountant'))
+    );
+    CREATE TABLE IF NOT EXISTS components (
+      id BIGSERIAL PRIMARY KEY, sku TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'cái', stock INTEGER NOT NULL DEFAULT 0,
+      reserved INTEGER NOT NULL DEFAULT 0, min_stock INTEGER NOT NULL DEFAULT 0, category_id BIGINT
+    );
+    CREATE TABLE IF NOT EXISTS component_categories (
+      id BIGSERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS commission_rules (
+      threshold BIGINT PRIMARY KEY, rate DOUBLE PRECISION NOT NULL CHECK(rate >= 0 AND rate <= 100)
+    );
+    CREATE TABLE IF NOT EXISTS products (
+      id BIGSERIAL PRIMARY KEY, sku TEXT UNIQUE NOT NULL, name TEXT NOT NULL, price BIGINT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS product_components (
+      product_id BIGINT NOT NULL REFERENCES products(id), component_id BIGINT NOT NULL REFERENCES components(id),
+      quantity INTEGER NOT NULL, PRIMARY KEY(product_id, component_id)
+    );
+    CREATE TABLE IF NOT EXISTS orders (
+      id BIGSERIAL PRIMARY KEY, code TEXT UNIQUE NOT NULL, customer_name TEXT NOT NULL,
+      customer_phone TEXT, delivery_address TEXT, note TEXT, product_id BIGINT NOT NULL REFERENCES products(id),
+      quantity INTEGER NOT NULL, total BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+      progress INTEGER NOT NULL DEFAULT 0, created_by BIGINT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL,
+      accepted_by BIGINT REFERENCES users(id), accepted_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id BIGSERIAL PRIMARY KEY, component_id BIGINT NOT NULL REFERENCES components(id), quantity INTEGER NOT NULL,
+      transaction_type TEXT NOT NULL CHECK(transaction_type IN ('in','adjustment')), note TEXT,
+      created_by BIGINT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS urgent_purchase_requests (
+      id BIGSERIAL PRIMARY KEY, component_id BIGINT NOT NULL REFERENCES components(id), requested_quantity INTEGER NOT NULL,
+      note TEXT, status TEXT NOT NULL DEFAULT 'open', created_by BIGINT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL,
+      handled_by BIGINT REFERENCES users(id), handled_at TEXT
+    );
+    """
+    for statement in statements.split(";"):
+        if statement.strip():
+            db.execute(statement)
+    if db.execute("SELECT COUNT(*) AS count FROM users").fetchone()['count'] == 0:
+        seed(db)
+    else:
+        db.execute("INSERT OR IGNORE INTO users(name,email,password_hash,role) VALUES(?,?,?,?)",
+                   ('Phạm Thu Hà', 'ketoan@khoflow.local', generate_password_hash('KeToan123!', method='pbkdf2:sha256'), 'accountant'))
+    seed_component_categories(db)
+    seed_commission_rules(db)
+    db.commit()
 
 
 def seed(db):

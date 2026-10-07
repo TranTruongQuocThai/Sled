@@ -23,6 +23,7 @@ def create_app():
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "sled-local-development-only"),
         DATABASE=database_path,
+        DATABASE_URL=os.environ.get("DATABASE_URL", ""),
         SESSION_COOKIE_SECURE=bool(os.environ.get("VERCEL")),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
