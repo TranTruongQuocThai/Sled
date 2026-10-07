@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block heading %}Đơn hàng{% endblock %}
+{% block subheading %}{% if session.role == 'sales' %}Không gian theo dõi đơn hàng cá nhân của bạn{% else %}Đơn từ Sale đang chờ được tiếp nhận và xử lý.{% endif %}{% endblock %}
+{% block content %}
+{% if session.role == 'sales' %}
+<section class="sales-orders-page">
+  <div class="sales-orders-intro">
+    <div><span class="sales-kicker">SLED · ĐƠN HÀNG CỦA TÔI</span><h2>Theo dõi từng cơ hội bán hàng</h2><p>Xem thông tin khách hàng và tiến độ xử lý của các đơn do bạn tạo.</p></div>
+    <a class="primary" href="{{ url_for('orders.create') }}">＋ Tạo đơn hàng mới</a>
+  </div>
+  <div class="sales-order-list">
+    {% for order in orders %}
+    <article class="sales-order-card">
+      <div class="sales-order-top">
+        <div class="sales-order-customer"><i class="box">☷</i><div><span class="sales-order-code">{{ order.code }}</span><h3>{{ order.customer_name }}</h3><p>{{ order.product_name }} · {{ order.quantity }} sản phẩm</p></div></div>
+        {% if not order.accepted_by %}<a class="status {{ order.status }} sales-status-link" href="{{ url_for('orders.edit', order_id=order.id) }}">Chờ tiếp nhận · Chỉnh sửa</a>{% else %}<em class="status {{ order.status }}">{{ {'accepted':'Đã nhận đơn','installing':'Đang lắp đặt','testing':'Đang kiểm thử','completed':'Hoàn thành','delivering':'Đang giao hàng'}.get(order.status,'Đang xử lý') }}</em>{% endif %}
+      </div>
+      <div class="sales-order-meta">
+        <div><small>Giá trị đơn hàng</small><b>{{ '{:,.0f}'.format(order.total).replace(',','.') }}đ</b></div>
+        <div><small>Ngày tạo</small><b>{{ order.created_at[:10] }}</b></div>
+        <div><small>Người phụ trách</small><b>{{ order.receiver_name or 'Đang chờ tiếp nhận' }}</b></div>
+      </div>
+      {% if order.accepted_by %}
+      <div class="sales-progress"><div><span>Tiến độ thực hiện</span><b>{{ order.progress }}%</b></div><i><span style="width: {{ order.progress }}%"></span></i><small>{{ {'accepted':'Đơn đã được xưởng tiếp nhận','installing':'Đội kỹ thuật đang lắp đặt','testing':'Sản phẩm đang được kiểm thử','completed':'Sản phẩm đã hoàn thành','delivering':'Đơn hàng đang được giao đến khách'}.get(order.status,'Đơn hàng đang được xử lý') }}</small></div>
+      {% else %}
+      <div class="sales-awaiting"><span>◷</span> Đơn hàng đang chờ xưởng tiếp nhận.</div>
+      {% endif %}
+      <div class="sales-order-actions"><a href="{{ url_for('orders.detail', order_id=order.id) }}">Xem chi tiết →</a>{% if not order.accepted_by %}<a class="sales-edit-link" href="{{ url_for('orders.edit', order_id=order.id) }}">Chỉnh sửa</a>{% endif %}</div>
+    </article>
+    {% else %}
+    <div class="sales-empty"><span>＋</span><h3>Bạn chưa có đơn hàng nào</h3><p>Tạo đơn hàng đầu tiên để bắt đầu theo dõi cơ hội bán hàng.</p><a class="primary" href="{{ url_for('orders.create') }}">Tạo đơn hàng</a></div>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+{% set labels = {'accepted':'Nhận đơn','installing':'Đang lắp đặt','testing':'Đang kiểm thử','completed':'Hoàn thành','delivering':'Giao hàng'} %}
+{% set next_stages = {'accepted':'installing','installing':'testing','testing':'completed','completed':'delivering'} %}
+<article class="card table-card"><div class="card-head"><div><h3>Danh sách đơn hàng xử lý</h3><p>Thông tin khách hàng, người tạo, người phụ trách và tiến độ xử lý.</p></div>{% if session.role != 'technician' %}<a class="primary" href="{{ url_for('orders.create') }}">＋ Tạo đơn hàng</a>{% endif %}</div>
+{% for order in orders %}
+<div class="order-card"><div class="invoice"><i class="box">☷</i><div class="grow"><b>{{ order.customer_name }}</b><small>{{ order.code }} · {{ order.product_name }} · {{ order.quantity }} sản phẩm</small></div><div class="owner"><small>Người tạo</small><b>{{ order.owner_name }}</b></div><div class="owner"><small>Người nhận</small><b>{{ order.receiver_name or 'Chưa có người nhận' }}</b></div><div class="right"><b>{{ '{:,.0f}'.format(order.total).replace(',','.') }}đ</b><small>{{ order.created_at[:10] }}</small></div>{% if order.accepted_by %}<em class="status {{ order.status }}">{{ labels.get(order.status,'Nhận đơn') }}</em>{% else %}<form method="post" action="{{ url_for('orders.accept', order_id=order.id) }}"><button class="accept" type="submit">Nhận đơn</button></form>{% endif %}</div>
+{% if order.accepted_by %}{% set next_stage = next_stages.get(order.status) %}<div class="progress-area"><div class="progress-title"><span>Tiến độ thực hiện</span><b>{{ order.progress }}%</b></div><div class="progress-track"><i style="width: {{ order.progress }}%"></i></div><div class="stage-list"><span class="done">✓ Nhận đơn</span><span class="{{ 'done' if order.progress >= 45 else '' }}">2. Lắp đặt</span><span class="{{ 'done' if order.progress >= 70 else '' }}">3. Kiểm thử</span><span class="{{ 'done' if order.progress >= 90 else '' }}">4. Hoàn thành</span><span class="{{ 'done' if order.progress >= 100 else '' }}">5. Giao hàng</span></div>{% if next_stage and (session.role == 'technician' and order.accepted_by == session.user_id or session.role == 'manager') %}<form class="progress-form" method="post" action="{{ url_for('orders.update_progress', order_id=order.id) }}"><input type="hidden" name="status" value="{{ next_stage }}"><button class="accept" type="submit">Chuyển sang: {{ labels[next_stage] }} →</button></form>{% elif order.status == 'delivering' %}<small class="finished">✓ Đơn hàng đã hoàn tất giao hàng.</small>{% endif %}</div>{% endif %}</div>
+{% else %}<div class="empty">Chưa có đơn hàng nào.</div>{% endfor %}</article>
+{% endif %}
+{% endblock %}

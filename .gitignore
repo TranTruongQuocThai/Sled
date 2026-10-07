@@ -1,0 +1,18 @@
+# Runtime data and local secrets
+warehouse.db
+*.db
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# JavaScript
+node_modules/
+dist/
+
+# Editor and operating-system files
+.DS_Store
+.vscode/

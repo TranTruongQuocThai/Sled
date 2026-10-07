@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 92" role="img" aria-labelledby="title">
+  <title id="title">SLED</title>
+  <g fill="none" stroke="#e83d2d" stroke-width="5">
+    <circle cx="47" cy="46" r="40"/>
+    <circle cx="47" cy="46" r="32" stroke-width="2"/>
+  </g>
+  <path fill="#e83d2d" d="M72 19c-12 1-25 4-34 11-6 5-9 12-8 19 1 8 7 13 16 15l10 2c5 1 6 3 4 7-3 5-12 8-27 10l-7 13c20-3 34-9 41-18 5-7 6-15 2-21-3-5-9-8-18-10l-10-2c-5-1-6-3-4-6 4-5 15-8 30-9z"/>
+  <g fill="#f47721"><path d="M112 61h8l12-34h-8z"/><path d="M124 61h5l12-34h-5z"/><path d="M140 27h51l-3 10h-37l-2 6h35l-3 9h-35l-3 9h38l-4 10h-52z"/><path d="M197 27h30c16 0 24 7 20 20-4 14-16 24-33 24h-31zm13 10-8 24h13c8 0 14-5 16-12 2-8-1-12-9-12z"/></g>
+</svg>
