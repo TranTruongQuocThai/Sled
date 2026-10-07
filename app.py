@@ -1,4 +1,6 @@
 import click
+import os
+from pathlib import Path
 from flask import Flask
 from werkzeug.security import generate_password_hash
 from controllers.auth import auth_bp
@@ -11,9 +13,19 @@ from models.repository import init_db
 
 def create_app():
     app = Flask(__name__)
+    project_dir = Path(__file__).resolve().parent
+    # Vercel Functions only allow temporary writes. SQLite in /tmp keeps the
+    # demo runnable there, but a managed Postgres database is required for
+    # durable production data across instances and deployments.
+    database_path = os.environ.get("SLED_DATABASE_PATH")
+    if not database_path:
+        database_path = "/tmp/sled-warehouse.db" if os.environ.get("VERCEL") else str(project_dir / "warehouse.db")
     app.config.from_mapping(
-        SECRET_KEY="change-this-secret-before-production",
-        DATABASE="warehouse.db",
+        SECRET_KEY=os.environ.get("SECRET_KEY", "sled-local-development-only"),
+        DATABASE=database_path,
+        SESSION_COOKIE_SECURE=bool(os.environ.get("VERCEL")),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
     )
     init_db(app)
     app.register_blueprint(auth_bp)
