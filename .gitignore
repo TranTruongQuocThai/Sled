@@ -17,3 +17,7 @@ dist/
 .DS_Store
 .vscode/
 .vercel/
+.turso-bin/
+turso-auth-url.txt
+.vercel
+.env*

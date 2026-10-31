@@ -11,23 +11,38 @@ from controllers.accounting import accounting_bp
 from models.repository import init_db
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
+    on_vercel = bool(os.environ.get("VERCEL"))
+    secret_key = os.environ.get("SECRET_KEY", "")
+    turso_url = os.environ.get("TURSO_DATABASE_URL", "")
+    turso_token = os.environ.get("TURSO_AUTH_TOKEN", "")
+    if on_vercel and not secret_key:
+        raise RuntimeError("SECRET_KEY is required on Vercel.")
+    if on_vercel and not (turso_url and turso_token):
+        raise RuntimeError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required on Vercel.")
     project_dir = Path(__file__).resolve().parent
-    # Vercel Functions only allow temporary writes. SQLite in /tmp keeps the
-    # demo runnable there, but a managed Postgres database is required for
-    # durable production data across instances and deployments.
-    database_path = os.environ.get("SLED_DATABASE_PATH")
-    if not database_path:
-        database_path = "/tmp/sled-warehouse.db" if os.environ.get("VERCEL") else str(project_dir / "warehouse.db")
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "sled-local-development-only"),
-        DATABASE=database_path,
-        DATABASE_URL=os.environ.get("DATABASE_URL", ""),
-        SESSION_COOKIE_SECURE=bool(os.environ.get("VERCEL")),
+        SECRET_KEY=secret_key or "sled-local-development-only",
+        DATABASE=os.environ.get("SLED_DATABASE", str(project_dir / "warehouse.db")),
+        SEED_DEMO=not (on_vercel or bool(turso_url)),
+        MAX_CONTENT_LENGTH=8 * 1024 * 1024,
+        TURSO_DATABASE_URL=turso_url,
+        TURSO_AUTH_TOKEN=turso_token,
+        SESSION_COOKIE_SECURE=on_vercel,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
     )
+    if test_config:
+        app.config.update(test_config)
+    from models.security import install_security
+    install_security(app)
+    @app.errorhandler(OverflowError)
+    def invalid_numeric_value(error):
+        return 'Giá trị số vượt giới hạn cho phép.', 400
+
+    from models.commands import register_commands
+    register_commands(app)
     init_db(app)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)

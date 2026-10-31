@@ -1,0 +1,12 @@
+.git
+.turso-bin
+turso-auth-url.txt
+warehouse.db
+*.db
+legacy-ui
+__pycache__
+.venv
+venv
+node_modules
+.env
+.env.*

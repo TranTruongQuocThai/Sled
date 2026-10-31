@@ -1,8 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "flask",
+  "regions": ["sin1"],
   "functions": {
     "app.py": {
-      "excludeFiles": "{warehouse.db,src/**,node_modules/**,**/__pycache__/**,**/*.pyc}"
+      "maxDuration": 30,
+      "excludeFiles": "{warehouse.db,legacy-ui/**,static/**,node_modules/**,**/__pycache__/**,**/*.pyc}"
     }
   }
 }

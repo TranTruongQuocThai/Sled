@@ -1,8 +1,7 @@
 from functools import wraps
-import sqlite3
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
-from models.repository import get_db
+from models.repository import INTEGRITY_ERRORS, get_db
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -12,9 +11,13 @@ def login_required(roles=None):
         def wrapped(*args, **kwargs):
             if 'user_id' not in session:
                 return redirect(url_for('auth.login'))
-            if roles and session.get('role') not in roles:
-                flash('Bạn không có quyền truy cập chức năng này.', 'error')
-                return redirect(url_for('dashboard.home'))
+            user = get_db().execute('SELECT id,name,role FROM users WHERE id=?', (session['user_id'],)).fetchone()
+            if not user:
+                session.clear()
+                return redirect(url_for('auth.login'))
+            session.update(role=user['role'], user_name=user['name'])
+            if roles and user['role'] not in roles:
+                abort(403)
             return view(*args, **kwargs)
         return wrapped
     return decorator
@@ -42,7 +45,7 @@ def register():
         role = request.form.get('role', 'sales')
         if not name or not email or not password:
             flash('Vui lòng nhập đầy đủ họ tên, email và mật khẩu.', 'error')
-        elif role not in ('sales', 'technician', 'accountant'):
+        elif role != 'sales':
             flash('Vai trò đăng ký không hợp lệ.', 'error')
         elif len(password) < 6:
             flash('Mật khẩu cần có ít nhất 6 ký tự.', 'error')
@@ -56,7 +59,7 @@ def register():
                 db.commit()
                 flash('Đăng ký thành công. Hãy đăng nhập để tiếp tục.', 'success')
                 return redirect(url_for('auth.login'))
-            except sqlite3.IntegrityError:
+            except INTEGRITY_ERRORS:
                 flash('Email này đã được đăng ký.', 'error')
     return render_template('register.html')
 
