@@ -166,9 +166,10 @@ def init_db(app):
         """)
         users_schema = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()['sql']
         remote = using_turso()
-        if "'warehouse'" not in users_schema:
-            if not remote:
-                db.execute("PRAGMA foreign_keys=OFF")
+        # Local SQLite can rebuild users with FK off. Turso rejects that rebuild while
+        # orders/audit rows still reference users, so skip it there — existing roles still login.
+        if "'warehouse'" not in users_schema and not remote:
+            db.execute("PRAGMA foreign_keys=OFF")
             db.executescript("""
             BEGIN;
             CREATE TABLE users_admin_migration (
@@ -181,8 +182,7 @@ def init_db(app):
             ALTER TABLE users_admin_migration RENAME TO users;
             COMMIT;
             """)
-            if not remote:
-                db.execute("PRAGMA foreign_keys=ON")
+            db.execute("PRAGMA foreign_keys=ON")
         if not remote:
             db.execute('BEGIN IMMEDIATE')
         # Migration for databases created before the assignment workflow was added.
