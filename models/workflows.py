@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
-from models.repository import get_db, record_audit, record_inventory_movement
+from models.repository import get_db, record_audit, record_inventory_movement, using_turso
 
 EPSILON = 0.0000001
 
@@ -49,7 +49,8 @@ def insert_rows(db, prefix, rows, suffix=''):
 @contextmanager
 def atomic():
     db = get_db()
-    db.execute('BEGIN IMMEDIATE')
+    # Turso HTTP rejects BEGIN IMMEDIATE; plain BEGIN is enough for request-scoped writes.
+    db.execute('BEGIN' if using_turso() else 'BEGIN IMMEDIATE')
     try:
         yield db
         db.commit()

@@ -7,18 +7,23 @@ import turso_serverless
 INTEGRITY_ERRORS = (sqlite3.IntegrityError, turso_serverless.IntegrityError)
 
 
+def using_turso():
+    return bool(current_app.config.get("TURSO_DATABASE_URL") and current_app.config.get("TURSO_AUTH_TOKEN"))
+
+
 def get_db():
     if "db" not in g:
         turso_url = current_app.config.get("TURSO_DATABASE_URL")
         turso_token = current_app.config.get("TURSO_AUTH_TOKEN")
         if turso_url and turso_token:
+            # Turso HTTP rejects local SQLite PRAGMA statements such as busy_timeout.
             g.db = turso_serverless.connect(turso_url, auth_token=turso_token)
             g.db.row_factory = turso_serverless.Row
         else:
             g.db = sqlite3.connect(current_app.config["DATABASE"])
             g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys=ON")
-        g.db.execute("PRAGMA busy_timeout=10000")
+            g.db.execute("PRAGMA foreign_keys=ON")
+            g.db.execute("PRAGMA busy_timeout=10000")
     return g.db
 
 
@@ -160,10 +165,12 @@ def init_db(app):
         );
         """)
         users_schema = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()['sql']
+        remote = using_turso()
         if "'warehouse'" not in users_schema:
-            db.execute("PRAGMA foreign_keys=OFF")
+            if not remote:
+                db.execute("PRAGMA foreign_keys=OFF")
             db.executescript("""
-            BEGIN IMMEDIATE;
+            BEGIN;
             CREATE TABLE users_admin_migration (
               id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
               password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','sales','technician','accountant','warehouse','purchasing'))
@@ -174,8 +181,10 @@ def init_db(app):
             ALTER TABLE users_admin_migration RENAME TO users;
             COMMIT;
             """)
-            db.execute("PRAGMA foreign_keys=ON")
-        db.execute('BEGIN IMMEDIATE')
+            if not remote:
+                db.execute("PRAGMA foreign_keys=ON")
+        if not remote:
+            db.execute('BEGIN IMMEDIATE')
         # Migration for databases created before the assignment workflow was added.
         order_columns = {row["name"] for row in db.execute("PRAGMA table_info(orders)")}
         if "accepted_by" not in order_columns:
